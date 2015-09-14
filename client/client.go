@@ -1,4 +1,4 @@
-package client
+package main
 
 import (
 	"RandomString"
@@ -158,7 +158,7 @@ func Handle(conn net.Conn, message string) {
 	}
 }
 
-func Start() {
+func main() {
 	defaultHost := "127.0.0.1"
 	defaultPort := 10086
 	if len(os.Args) > 1 {
