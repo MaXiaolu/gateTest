@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -10,28 +10,15 @@ import (
 )
 
 type Server struct {
-	conn net.Conn
+	conns       map[int]net.Conn
+	next_serial int
 }
 
-var (
-	conns       map[int]net.Conn = make(map[int]net.Conn)
-	next_serial                  = 1
-)
-
-func GetNextSerial() int {
-	serial := next_serial
-	for {
-		if conns[serial] != nil {
-			serial += 1
-		} else {
-			break
-		}
-	}
-	next_serial = serial + 1
-	return serial
+func NewServer() *Server {
+	return &Server{conns: make(map[int]net.Conn), next_serial: 1}
 }
 
-func main() {
+func (s *Server) Start() {
 	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:10086")
 	checkErr(err)
 	listen, err := net.ListenTCP("tcp", addr)
@@ -40,21 +27,14 @@ func main() {
 	for {
 		conn, err := listen.Accept()
 		checkErr(err)
-		server := new(Server)
-		server.InitServer(conn)
-		go server.Handle() // 每次建立一个连接就放到单独的线程内做处理
+		serial := s.GetNextSerial()
+		s.conns[serial] = conn
+		go s.Handle(serial) // 每次建立一个连接就放到单独的线程内做处理
 	}
 }
 
-func (s *Server) InitServer(conn net.Conn) {
-	serial := GetNextSerial()
-	conns[serial] = conn
-	s.conn = conn
-	fmt.Println("AAAA")
-}
-
-func (s *Server) Handle() {
-	conn := s.conn
+func (s *Server) Handle(serial int) {
+	conn := s.conns[serial]
 	head := make([]byte, 2)
 	defer conn.Close()
 	for {
@@ -76,12 +56,25 @@ func (s *Server) Handle() {
 			break
 		}
 		fmt.Println("len", info_len, body_len, string(body))
-		WriteTo(1, body)
+		//s.WriteTo(1, body)
 	}
 }
 
-func WriteTo(serial int, data []byte) error {
-	conn := conns[serial]
+func (s *Server) GetNextSerial() int {
+	serial := s.next_serial
+	for {
+		if s.conns[serial] != nil {
+			serial += 1
+		} else {
+			break
+		}
+	}
+	s.next_serial = serial + 1
+	return serial
+}
+
+func (s *Server) WriteTo(serial int, data []byte) error {
+	conn := s.conns[serial]
 	if conn != nil {
 		buf := new(bytes.Buffer)
 		if err := binary.Write(buf, binary.BigEndian, uint16(len(data))); err != nil {
@@ -95,11 +88,11 @@ func WriteTo(serial int, data []byte) error {
 	return nil
 }
 
-func IsConnClosed(serial int) {
-	conn := conns[serial]
+func (s *Server) Close(serial int) {
+	conn := s.conns[serial]
 	if conn != nil {
 		if _, err := conn.Write([]byte("")); err != nil {
-			conns[serial] = nil
+			s.conns[serial] = nil
 		}
 	}
 }
