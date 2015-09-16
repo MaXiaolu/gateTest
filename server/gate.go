@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 )
 
 type Server struct {
@@ -18,24 +17,28 @@ func NewServer() *Server {
 	return &Server{conns: make(map[int]net.Conn), next_serial: 1}
 }
 
-func (s *Server) Start() {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:10086")
-	checkErr(err)
+func (s *Server) Start(ServerAddr, RpcAddr string) error {
+	addr, err := net.ResolveTCPAddr("tcp", ServerAddr)
+	if err != nil {
+		return err
+	}
 	listen, err := net.ListenTCP("tcp", addr)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 	fmt.Println("Start server...")
 	for {
 		conn, err := listen.Accept()
-		checkErr(err)
-		reply := CallRpc("Arith.Multiply", 10, 20)
-		fmt.Printf("reply:%d\n", reply)
+		if err != nil {
+			return err
+		}
 		serial := s.GetNextSerial()
 		s.conns[serial] = conn
-		go s.Handle(serial) // 每次建立一个连接就放到单独的线程内做处理
+		go s.Handle(serial, RpcAddr) // 每次建立一个连接就放到单独的线程内做处理
 	}
 }
 
-func (s *Server) Handle(serial int) {
+func (s *Server) Handle(serial int, RpcAddr string) {
 	conn := s.conns[serial]
 	head := make([]byte, 2)
 	defer conn.Close()
@@ -57,8 +60,10 @@ func (s *Server) Handle(serial int) {
 			fmt.Println(err)
 			break
 		}
+		reply := CallRpc(RpcAddr, "Arith.Multiply", int(info_len), int(body_len))
+		fmt.Printf("reply:%d\n", reply)
 		fmt.Println("len", info_len, body_len, string(body))
-		s.WriteTo(1, body)
+		s.WriteTo(serial, body)
 	}
 }
 
@@ -96,12 +101,5 @@ func (s *Server) IsConnClosed(serial int) {
 		if _, err := conn.Write([]byte("")); err != nil {
 			s.conns[serial] = nil
 		}
-	}
-}
-
-func checkErr(err error) {
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
 	}
 }

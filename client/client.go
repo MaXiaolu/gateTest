@@ -5,13 +5,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/MaXiaolu/gateTest/config"
 	"io"
 	"math/rand"
 	"net"
 	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
+	//"path/filepath"
+	//"strconv"
+	//"strings"
+	"log"
 	"time"
 )
 
@@ -79,13 +81,14 @@ func RandomStrings(limit int) string {
 	return RandomString.RandomString(uint(str_len))
 }
 
-func RunTest(host string, port int) error {
-	addr := net.TCPAddr{
-		IP:   net.ParseIP(host),
-		Port: port,
+func RunTest(hostAddress string) error {
+	addr, err := net.ResolveTCPAddr("tcp", hostAddress)
+	if err != nil {
+		log.Print(err)
+		return err
 	}
 
-	client, err := net.DialTCP("tcp", nil, &addr)
+	client, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -101,7 +104,7 @@ func RunTest(host string, port int) error {
 		return err
 	}
 
-	fmt.Println(string(buf.Bytes()))
+	//fmt.Println(string(buf.Bytes()))
 
 	if err := testSplitBoth(client, buf); err != nil {
 		return err
@@ -151,35 +154,23 @@ func Handle(conn net.Conn, message string) {
 				fmt.Println(err)
 				break
 			}
-			//if bytes.Equal([]byte(message), body) {
-			fmt.Println("len", info_len, body_len, string(body))
+			if bytes.Equal([]byte(message), body) {
+				fmt.Println("len", info_len, body_len, string(body))
+			}
 		}
-		//}
 	}
 }
 
 func main() {
-	defaultHost := "127.0.0.1"
-	defaultPort := 10086
-	if len(os.Args) > 1 {
-		if port, err := strconv.Atoi(os.Args[1]); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		} else {
-			defaultPort = port
-		}
-		if len(os.Args) > 2 {
-			defaultHost = strings.TrimSpace(os.Args[2])
-		}
-	} else {
-		progname := filepath.Base(os.Args[0])
-		fmt.Printf("Usage: %s [port] [host]\n", progname)
-		//os.Exit(1)
+	cfg, err := config.LoadConfig("../config/config.json")
+	if err != nil {
+		log.Fatal(err)
 	}
-	for i := 0; i < 1; i++ {
-		err := RunTest(defaultHost, defaultPort)
+	for i := 0; i < cfg.MaxConn; i++ {
+		err = RunTest(cfg.Addr.ServerAddr)
 		if err != nil {
 			fmt.Println(err)
+			os.Exit(-1)
 		}
 	}
 	for {

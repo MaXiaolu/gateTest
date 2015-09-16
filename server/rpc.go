@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	//"github.com/MaXiaolu/gateTest/config"
 	"log"
 	"net"
 	"net/http"
@@ -19,12 +20,12 @@ func (t *Arith) Multiply(args *Args, reply *int) error {
 	return nil
 }
 
-func StarRpc() {
+func StarRpc(RpcAddr string) error {
 	log.Printf("gamed started ")
 	for {
-		l, e := net.Listen("tcp", ":1234")
-		if e != nil {
-			log.Fatal("listen error:", e)
+		l, err := net.Listen("tcp", RpcAddr)
+		if err != nil {
+			return err
 		}
 		arith := new(Arith)
 		rpc.Register(arith)
@@ -33,9 +34,9 @@ func StarRpc() {
 	}
 }
 
-func CallRpc(method string, A, B int) int {
+func CallRpc(RpcAddr, method string, A, B int) int {
 	reply := 0
-	client, err := rpc.DialHTTP("tcp", ":1234")
+	client, err := rpc.DialHTTP("tcp", RpcAddr)
 	if err != nil {
 		log.Fatal("dialing:", err)
 	} else {

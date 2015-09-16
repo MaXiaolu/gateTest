@@ -1,0 +1,7 @@
+{
+	"Addr":{
+		"ServerAddr":":10086",
+		"RpcAddr":":12345"
+	},
+	"MaxConn":15
+}
