@@ -4,16 +4,13 @@ import (
 	"RandomString"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/MaXiaolu/gateTest/config"
 	"io"
+	"log"
 	"math/rand"
 	"net"
-	"os"
-	//"path/filepath"
-	//"strconv"
-	//"strings"
-	"log"
 	"time"
 )
 
@@ -22,7 +19,7 @@ func testWriteWhole(client *net.TCPConn, buf *bytes.Buffer) error {
 	if _, err := client.Write(buf.Bytes()); err != nil {
 		return err
 	}
-	return nil
+	return EqualRead(client, buf.Bytes())
 }
 
 // Write part of header first
@@ -34,7 +31,7 @@ func testSplitHeader(client *net.TCPConn, buf *bytes.Buffer) error {
 	if _, err := client.Write(data[1:]); err != nil {
 		return err
 	}
-	return nil
+	return EqualRead(client, data)
 }
 
 // Write header and part of body first
@@ -47,7 +44,7 @@ func testSplitBody(client *net.TCPConn, buf *bytes.Buffer) error {
 	if _, err := client.Write(data[split:]); err != nil {
 		return err
 	}
-	return nil
+	return EqualRead(client, data)
 }
 
 // Write part of header, then left of header and part of body, then left body
@@ -63,7 +60,7 @@ func testSplitBoth(client *net.TCPConn, buf *bytes.Buffer) error {
 	if _, err := client.Write(data[split:]); err != nil {
 		return err
 	}
-	return nil
+	return EqualRead(client, data)
 }
 
 // Write 3 message in one package
@@ -72,7 +69,7 @@ func testMutipleMessage(client *net.TCPConn, buf *bytes.Buffer) error {
 	if _, err := client.Write(data); err != nil {
 		return err
 	}
-	return nil
+	return EqualRead(client, data)
 }
 
 func RandomStrings(limit int) string {
@@ -81,84 +78,62 @@ func RandomStrings(limit int) string {
 	return RandomString.RandomString(uint(str_len))
 }
 
-func RunTest(hostAddress string) error {
+func RunTest(hostAddress string) {
 	addr, err := net.ResolveTCPAddr("tcp", hostAddress)
 	if err != nil {
 		log.Print(err)
-		return err
+		return
 	}
 
 	client, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		fmt.Println(err)
-		return err
+		return
 	}
 
 	message := RandomStrings(100)
 
 	buf := new(bytes.Buffer)
-	if err := binary.Write(buf, binary.BigEndian, uint16(len(message))); err != nil {
-		return err
-	}
-	if err := binary.Write(buf, binary.LittleEndian, []byte(message)); err != nil {
-		return err
-	}
+	binary.Write(buf, binary.BigEndian, uint16(len(message)))
+	binary.Write(buf, binary.LittleEndian, []byte(message))
 
 	//fmt.Println(string(buf.Bytes()))
 
 	if err := testSplitBoth(client, buf); err != nil {
-		return err
+		log.Print(err)
 	}
 	if i := 1; i == 0 {
 		if err := testWriteWhole(client, buf); err != nil {
-			return err
+			log.Print(err)
 		}
 		if err := testSplitHeader(client, buf); err != nil {
-			return err
+			log.Print(err)
 		}
 
 		if err := testSplitBody(client, buf); err != nil {
-			return err
+			log.Print(err)
 		}
 
 		if err := testSplitBoth(client, buf); err != nil {
-			return err
+			log.Print(err)
 		}
 		if err := testMutipleMessage(client, buf); err != nil {
-			return err
+			log.Print(err)
 		}
 	}
-	go Handle(client, message)
-	return nil
 }
 
-func Handle(conn net.Conn, message string) {
-	head := make([]byte, 2)
-	defer conn.Close()
-	for {
-		head_len, err := io.ReadFull(conn, head)
-		if head_len != 0 {
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-			var info_len uint16
-			buf := bytes.NewReader(head)
-			if err := binary.Read(buf, binary.BigEndian, &info_len); err != nil {
-				fmt.Println("binary.Read failed:", err)
-				break
-			}
-			body := make([]byte, info_len)
-			body_len, err := io.ReadFull(conn, body)
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-			if bytes.Equal([]byte(message), body) {
-				fmt.Println("len", info_len, body_len, string(body))
-			}
+func EqualRead(conn net.Conn, data []byte) error {
+	buf := make([]byte, len(data))
+	if body_len, err := io.ReadFull(conn, buf); err != nil {
+		return err
+	} else {
+		fmt.Println(string(data), string(buf))
+		if body_len > 0 && !bytes.Equal(data, buf) {
+			return errors.New("not equal")
 		}
 	}
+	return nil
 }
 
 func main() {
@@ -167,11 +142,8 @@ func main() {
 		log.Fatal(err)
 	}
 	for i := 0; i < cfg.MaxConn; i++ {
-		err = RunTest(cfg.Addr.ServerAddr)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(-1)
-		}
+		go RunTest(cfg.Addr.ServerAddr)
+
 	}
 	for {
 

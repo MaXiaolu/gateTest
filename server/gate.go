@@ -41,7 +41,7 @@ func (s *Server) Start(ServerAddr, RpcAddr string) error {
 func (s *Server) Handle(serial int, RpcAddr string) {
 	conn := s.conns[serial]
 	head := make([]byte, 2)
-	defer conn.Close()
+	defer s.Close(serial)
 	for {
 		_, err := io.ReadFull(conn, head)
 		if err != nil {
@@ -90,16 +90,18 @@ func (s *Server) WriteTo(serial int, data []byte) error {
 		if err := binary.Write(buf, binary.LittleEndian, data); err != nil {
 			return err
 		}
-		conn.Write(buf.Bytes())
+		if _, err := conn.Write(buf.Bytes()); err != nil {
+			s.Close(serial)
+		}
 	}
 	return nil
 }
 
-func (s *Server) IsConnClosed(serial int) {
-	conn := s.conns[serial]
-	if conn != nil {
-		if _, err := conn.Write([]byte("")); err != nil {
-			s.conns[serial] = nil
-		}
+func (s *Server) Close(serial int) {
+	if conn := s.conns[serial]; conn != nil {
+		conn.Close()
+		delete(s.conns, serial)
+	} else {
+		fmt.Println("not found serial %d", serial)
 	}
 }
