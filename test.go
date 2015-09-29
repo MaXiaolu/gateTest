@@ -6,6 +6,6 @@ import (
 )
 
 func main() {
-	str1 := RandomString.RandomString(100)
+	str1 := RandomString.RandomString(10)
 	fmt.Println(str1)
 }
